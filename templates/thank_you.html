@@ -1,11 +1,27 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Thank You</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <h1>Thank you for your participation!</h1>
+    <div class="thankyou_container"> <!-- Keeping the same class for styling -->
+
+        <h1>Thank You!</h1>
+
+        <p style="font-size: 1.2em; text-align: center;">
+            We appreciate your participation! Your vote has been recorded successfully. 
+        </p>
+
+        <h2>Your Voice Matters!</h2>
+
+        <p style="font-size: 1.1em; text-align: center;">
+            Stay tuned for the final results and winners announcement! 🎉
+        </p>
+
+    </div>
 </body>
 </html>

@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,20 +9,34 @@
 <body>
     <div class="audience_dashboard_container">
         <h1>Audience Dashboard</h1>
-        <h3>Vote for the Ideas (Max 100 points per idea)</h3>
-
-        <form method="POST" action="{{ url_for('audience_dashboard') }}">
-            <div class="grid-container">
-                {% for idea in ideas %}
-                    <div class="grid-item">
-                        <p>{{ idea.name }}</p>
-                        <input type="hidden" name="idea_id" value="{{ idea.id }}">
-                        <label for="score_{{ idea.id }}">Score (0-100):</label>
-                        <input type="number" name="score_{{ idea.id }}" id="score_{{ idea.id }}" 
-                               min="0" max="100" value="{{ idea.score_audience }}" required>
-                    </div>
-                {% endfor %}
-            </div>
+        <h3>Vote for the Ideas (Max 50 points per idea)</h3>
+         
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+        <script>
+            var socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
+        
+            function submitScores() {
+                let scores = {};
+                document.querySelectorAll("select").forEach(select => {
+                    scores[select.name] = select.value;
+                });
+        
+                socket.emit('submit_scores', scores);
+                alert("Scores submitted successfully!");
+                window.location.href = "{{ url_for('thank_you') }}";
+            }
+        </script> 
+        
+        <form onsubmit="submitScores(); return false;">
+            {% for idea in ideas %}
+                <label for="score_{{ idea.id }}">{{ idea.name }}:</label>
+                <select name="{{ idea.id }}" required>
+                    {% for score in range(0, 55, 5) %}
+                        <option value="{{ score }}">{{ score }}</option>
+                    {% endfor %}
+                </select>
+                <br>
+            {% endfor %}
             <button type="submit">Submit Scores</button>
         </form>
     </div>

@@ -10,19 +10,36 @@ import win32com.client
 import time
 import pythoncom
 from datetime import datetime, timedelta
+from flask_socketio import SocketIO, emit
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+import os
+from os import getenv
+from flask_mail import Mail, Message
+
 
 app = Flask(__name__)
 app.secret_key = 'hello123'  # Use a strong secret key in production
 
+# Enable Flask-SocketIO with CORS to allow mobile access
+socketio = SocketIO(app, cors_allowed_origins="*")
+
 # Configuring SQLAlchemy with MYSQL database
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:11111@localhost/voting_db'
+DATABASE_URL = getenv('DATABASE_URL', 'mysql+pymysql://root:11111@127.0.0.1/voting_db')
+#app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:11111@localhost/voting_db'
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initializing the database
 db = SQLAlchemy(app)
 
+login_manager = LoginManager(app)
+login_manager.login_view = 'home'
+
+
 # Model for User (email and role)
-class User(db.Model):
+
+
+class User(UserMixin, db.Model):  # Inherit from UserMixin
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     role = db.Column(db.String(50), nullable=False)
@@ -35,8 +52,13 @@ class Idea(db.Model):
     score_audience = db.Column(db.Integer, default=0)
     total_score = db.Column(db.Integer, default=0)
 
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
 # OTP storage (simulated DB with an array)
-otp_storage = []
+otp_storage = {}
 
 # Helper function to generate OTP
 def generate_otp():
@@ -77,12 +99,23 @@ def calculate_total_scores():
 
 # Helper function to check if OTP is expired
 def is_otp_expired(stored_otp):
-    expiration_time = stored_otp['expiry_time']
-    return time.time() > expiration_time
+    if not stored_otp or 'expiry_time' not in stored_otp:
+        return True  # Consider missing OTP as expired
+    return time.time() > stored_otp['expiry_time']
 
-# Route for home page (login page)
-@app.route('/')
+
+# Home/Login Page
+@app.route('/', methods=['GET', 'POST'])
 def home():
+    if request.method == 'POST':
+        email = request.form['email']
+        role = request.form['role']
+        user = User.query.filter_by(email=email, role=role).first()
+        if user:
+            login_user(user)
+            session.permanent = True  # Keep user logged in
+            return redirect(url_for(f'{role}_dashboard'))
+        flash("Invalid email or role.", "danger")
     return render_template('login.html')
 
 # Route for sending OTP
@@ -97,8 +130,8 @@ def send_otp():
         if user.role == role:  # Check if the entered role matches the stored role
             otp = generate_otp()
             # Store OTP in the 'otp_storage' list with expiry time (10 minutes)
-            expiry_time = time.time() + 600  # 10 minutes from now
-            otp_storage.append({"email": email, "otp": otp, "expiry_time": expiry_time})
+            expiry_time = time.time() + 900  # 10 minutes from now
+            otp_storage[email]={"otp": otp, "expiry_time": expiry_time}
 
             # Send OTP via email
             subject = "Your OTP Code"
@@ -113,79 +146,153 @@ def send_otp():
     else:
         flash("Email not registered!", "danger")
         return redirect(url_for('home'))
-
+    print(f"Generated OTP for {email}: {otp}")
+ 
 # Route for OTP verification
 @app.route('/otp_verification', methods=['GET', 'POST'])
 def otp_verification():
-    email = request.args.get('email')  # Get the email from the URL query string
-    
+    email = request.args.get('email')  # Get email from query string
+    print(f"Email from request: {email}")  # Debugging  
+
     if request.method == 'POST':
         entered_otp = request.form['otp']
-        
-        # Check if the entered OTP matches the stored OTP for the email
-        stored_otp = next((otp for otp in otp_storage if otp['email'] == email), None)
-        
-        if stored_otp:
-            if is_otp_expired(stored_otp):
-                flash("OTP has expired. Please request a new one.", "danger")
-                return redirect(url_for('home'))
-            elif entered_otp == stored_otp['otp']:  # Compare the entered OTP with the stored OTP
-                session['user'] = email  # Set the user session
-                user = User.query.filter_by(email=email).first()  # Fetch the user object
-                if user:
-                    role = user.role  # Get the user's role from the database
-                    return redirect(url_for(f'{role}_dashboard'))  # Redirect based on user role
-                else:
-                    flash("User not found. Please try again.", "danger")
-                    return redirect(url_for('home'))
-            else:
-                flash("Invalid OTP. Please try again.", "danger")  # Invalid OTP message
-                return redirect(url_for('otp_verification', email=email))  # Redirect to OTP page to try again
-        else:
+        print(f"Entered OTP: {entered_otp}")  # Debugging
+    
+        # Retrieve the OTP dictionary entry
+        stored_otp = otp_storage.get(email, None)
+        print(f"Stored OTP for {email}: {stored_otp}")  # Debugging  
+
+        if not stored_otp:
             flash("No OTP found for this email. Please request a new one.", "danger")
             return redirect(url_for('home'))
+
+        # Check if OTP is expired
+        if is_otp_expired(stored_otp):
+            flash("OTP has expired. Please request a new one.", "danger")
+            del otp_storage[email]  # Remove expired OTP
+            return redirect(url_for('home'))
+
+        # Check if entered OTP matches stored OTP
+        if entered_otp == stored_otp['otp']:
+            del otp_storage[email]  # Delete OTP after successful verification
+            print(f"OTP verification successful for {email}")  # Debugging  
+
+            user = User.query.filter_by(email=email).first()
+
+            if user:
+                session['role'] = user.role  # Store role in session
+                session['user'] = email  #  Store email in session
+                session.permanent = True  #  Keep session alive
+                login_user(user)  # Ensures user stays logged in
+
+                print(f"User {email} logged in with role {user.role}")  # Debugging
+                return redirect(url_for(f'{user.role}_dashboard'))  # ✅ Correct redirection
+            else:
+                flash("User not found. Please try again.", "danger")
+                return redirect(url_for('home'))
+        else:
+            flash("Invalid OTP. Please try again.", "danger")
+            print("Invalid OTP entered!")  # Debugging  
+            return redirect(url_for('otp_verification', email=email))
 
     return render_template('otp_verification.html', email=email)
 
 
-# Route for Judge Dashboard
+# Login Route
+@app.route('/login', methods=['POST'])
+def login():
+    email = request.form['email']
+    role = request.form['role']
+
+    user = User.query.filter_by(email=email, role=role).first()
+
+    if not user:
+        user = User(email=email, role=role)
+        db.session.add(user)
+        db.session.commit()  # Commit new user
+
+    if user:
+        login_user(user)
+        session.permanent = True  # Keep session active
+        session['role'] = user.role  # Store role
+        session['user'] = email  # Store email
+        return redirect(url_for(f'{role}_dashboard'))  
+    else:
+        flash("Invalid email or role!", "danger")
+        return redirect(url_for('home'))
+
+
+
+# Judge Dashboard
 @app.route('/judge_dashboard', methods=['GET', 'POST'])
+@login_required
 def judge_dashboard():
+    if current_user.role != 'judge':
+        return redirect(url_for('home'))
+    
     if request.method == 'POST':
-        # Process Judge scores (0-50 for each idea)
         for idea in Idea.query.all():
             score = request.form.get(f"score_{idea.id}")
             if score:
-                idea.score_judge = int(score)
-        db.session.commit()  # Save changes to the database
-        flash("Scores submitted successfully! Thank you for your participation.", "success")
-        session.pop('user', None)  # Log out the user
-        return redirect(url_for('thank_you'))  # Redirect to Thank You page
+                idea.score_judge += int(score)  
+                idea.total_score += int(score)
+        db.session.commit()
+        update_scores()
+        return redirect(url_for('thankyou'))  # Redirect after voting
     return render_template('judge_dashboard.html', ideas=Idea.query.all())
 
-# Route for Audience Dashboard
+# Audience Dashboard
 @app.route('/audience_dashboard', methods=['GET', 'POST'])
+@login_required
 def audience_dashboard():
+    if current_user.role != 'audience':
+        return redirect(url_for('home'))
+    
     if request.method == 'POST':
-        # Process Audience scores (0-100 for each idea)
         for idea in Idea.query.all():
             score = request.form.get(f"score_{idea.id}")
             if score:
-                idea.score_audience = int(score)
-        db.session.commit()  # Save changes to the database
-        flash("Scores submitted successfully! Thank you for your participation.", "success")
-        session.pop('user', None)  # Log out the user
-        return redirect(url_for('thank_you'))  # Redirect to Thank You page
+                idea.score_audience += int(score) 
+                idea.total_score += int(score)
+        db.session.commit()
+        update_scores()
+        return redirect(url_for('thankyou'))  # Redirect after voting
     return render_template('audience_dashboard.html', ideas=Idea.query.all())
 
-# Route for Admin Dashboard
-@app.route('/admin_dashboard')
-def admin_dashboard():
-    calculate_total_scores() 
+
+# Real-time Score Update Function
+def update_scores():
     ideas = Idea.query.all()
-    winner = Idea.query.order_by(Idea.total_score.desc()).first() # Ensure total scores are calculated
-    db.session.commit()
-    return render_template('admin_dashboard.html', ideas=Idea.query.all(), winner=winner)
+
+    # Create scores dictionary
+    scores = {idea.id: {
+        'judge': idea.score_judge,
+        'audience': idea.score_audience,
+        'total': idea.total_score,
+        'name': idea.name
+    } for idea in ideas}
+
+    # Find the idea with the highest total score (Winner)
+    winner = max(ideas, key=lambda idea: idea.total_score, default=None)
+    winner_data = {'name': winner.name, 'score': winner.total_score} if winner else None
+
+    # Emit updated scores AND the winner to all connected clients
+    socketio.emit('update_scores', {'scores': scores, 'winner': winner_data})
+
+
+# Admin Dashboard
+@app.route('/admin_dashboard')
+@login_required
+def admin_dashboard():
+    if current_user.role != 'admin':
+        return redirect(url_for('home'))
+
+    ideas = Idea.query.all()
+
+    # Find the idea with the highest total_score
+    winner = max(ideas, key=lambda idea: idea.total_score, default=None)
+
+    return render_template('admin_dashboard.html', ideas=ideas, winner=winner)
 
 # Route for result page
 @app.route('/result')
@@ -198,35 +305,37 @@ def result():
 def thank_you():
     return render_template('thank_you.html')
 
-# Route to add users to the database (admin, judge, and audience)
-@app.route('/add_users')
-def add_users():
-    # Add admin user
-    admin_user = User.query.filter_by(email="vaishnaviingawale1@gmail.com").first()
-    if not admin_user:
-        admin_user = User(email="vaishnaviingawale1@gmail.com", role="admin")
-        db.session.add(admin_user)
 
-    # Add judge user
-    judge_user = User.query.filter_by(email="vingawale05@gmail.com").first()
-    if not judge_user:
-        judge_user = User(email="vingawale05@gmail.com", role="judge")
-        db.session.add(judge_user)
 
-    # Add audience user
-    audience_user = User.query.filter_by(email="vaishnai@amdocs.com").first()
-    if not audience_user:
-        audience_user = User(email="vaishnai@amdocs.com", role="audience")
-        db.session.add(audience_user)
-
-    db.session.commit()
-    flash("Users added successfully!", "success")
+# Logout
+@app.route('/logout')
+def logout():
+    logout_user()
     return redirect(url_for('home'))
+
+
+# Event to Update Scores
+@socketio.on('submit_scores')
+def handle_score_submission(data):
+    for idea_id, score in data.items():
+        idea = Idea.query.get(int(idea_id))
+        if idea:
+            if current_user.role == 'judge':
+                idea.score_judge += int(score)
+            elif current_user.role == 'audience':
+                idea.score_audience += int(score)
+            idea.total_score = idea.score_judge + idea.score_audience
+        db.session.commit()
+
+    # Call update_scores() to emit updated scores and winner in real time
+    update_scores()
+
 
 
 if __name__ == '__main__':
     # Create tables before starting the app
     with app.app_context():
         db.create_all()  # Create database tables
-    app.run(debug=True)
+    #app.run(debug=True)
+    socketio.run(app, debug=True, port=5000)
 
