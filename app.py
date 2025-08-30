@@ -312,5 +312,7 @@ if __name__ == '__main__':
     # IMPORTANT: Flask-SocketIO works best with socket.io-client v3.x
     # Update your HTML <script> to:
     # <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.1.3/socket.io.js"></script>
+    
+    
     socketio.run(app, debug=True, port=5000)
 
