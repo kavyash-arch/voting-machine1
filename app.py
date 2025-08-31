@@ -103,12 +103,8 @@ def cleanup_otps():
 
 
 # -------------------- Main --------------------
-if __name__ == "__main__":
-    # Local run only
-    from threading import Thread
-    Thread(target=cleanup_otps, daemon=True).start()
-    socketio.run(app, debug=True, port=5000, host="0.0.0.0")
-else:
-    # Render / Gunicorn will call app:app automatically
-    from threading import Thread
-    Thread(target=cleanup_otps, daemon=True).start()
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+    port = int(os.environ.get("PORT", 5000))  # Render dynamic port
+    socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
