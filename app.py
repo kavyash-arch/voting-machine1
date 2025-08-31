@@ -10,6 +10,7 @@ import os
 from os import getenv
 from threading import Thread
 
+
 # -------------------- App Config --------------------
 app = Flask(__name__)
 app.secret_key = getenv('SECRET_KEY', 'hello123')  # Use strong secret key in production
@@ -34,16 +35,25 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Initialize the database
 db = SQLAlchemy(app)
 
+with app.app_context():
+    db.create_all()
+
+
+
 # -------------------- Flask-Login --------------------
 login_manager = LoginManager(app)
 login_manager.login_view = 'home'
 
 
+
 # -------------------- Models --------------------
 class User(UserMixin, db.Model):
+    __tablename__ = "users"   # ✅ explicitly set a safe table name
+
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     role = db.Column(db.String(50), nullable=False)
+
 
 
 class Idea(db.Model):
@@ -302,17 +312,11 @@ def handle_score_submission(data):
 
 
 # -------------------- Main --------------------
+# -------------------- Main --------------------
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-
-    # Start background cleanup thread
+    # Start background cleanup thread (works in local dev)
     Thread(target=cleanup_otps, daemon=True).start()
 
-    # IMPORTANT: Flask-SocketIO works best with socket.io-client v3.x
-    # Update your HTML <script> to:
-    # <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.1.3/socket.io.js"></script>
-    
-    
     socketio.run(app, debug=True, port=5000)
+
 
