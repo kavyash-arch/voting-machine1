@@ -15,18 +15,11 @@ app.secret_key = getenv("SECRET_KEY", "hello123")  # Use strong secret key in pr
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 
-db_url = os.environ.get("DATABASE_URL")
-
-# If no DATABASE_URL (like in local dev), use local PostgreSQL
-if not db_url:
-    db_url = "postgresql+psycopg2://root:11111@127.0.0.1/voting_db"
-
-# Fix Render’s "postgres://" prefix if needed
-if db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
+db_url = "postgresql://votinguser:jCjWNVbhrboEPfRAueVohXZdNqJR7kB3@dpg-d2pbkp3e5dus73avlph0-a:5432/votingdb_p5a4"
 
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
 
 # Initialize DB
 db = SQLAlchemy(app)
