@@ -7,6 +7,7 @@ import string
 import time
 import os
 from os import getenv
+from sqlalchemy.pool import NullPool
 
 app = Flask(__name__)
 app.secret_key = getenv("SECRET_KEY", "hello123")  # Use strong secret key in production
@@ -19,6 +20,9 @@ db_url = "postgresql://votinguser:jCjWNVbhrboEPfRAueVohXZdNqJR7kB3@dpg-d2pbkp3e5
 
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "poolclass": NullPool
+}
 
 
 # Initialize DB
