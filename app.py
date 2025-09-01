@@ -5,6 +5,7 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 import random
 import string
 import time
+import os
 from os import getenv
 
 app = Flask(__name__)
@@ -13,14 +14,18 @@ app.secret_key = getenv("SECRET_KEY", "hello123")  # Use strong secret key in pr
 # Enable Flask-SocketIO with CORS
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Configuring SQLAlchemy with PostgreSQL database
-DATABASE_URL = getenv("DATABASE_URL", "postgresql+psycopg2://root:11111@127.0.0.1/voting_db")
 
-# Fix for Render: replace 'postgres://' with 'postgresql+psycopg2://'
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+db_url = os.environ.get("DATABASE_URL")
 
-app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
+# If no DATABASE_URL (like in local dev), use local PostgreSQL
+if not db_url:
+    db_url = "postgresql+psycopg2://root:11111@127.0.0.1/voting_db"
+
+# Fix Render’s "postgres://" prefix if needed
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # Initialize DB
