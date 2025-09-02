@@ -73,13 +73,18 @@ def home():
     if request.method == "POST":
         email = request.form["email"]
         role = request.form["role"]
-        user = User.query.filter_by(email=email, role=role).first()
+
+        user = User.query.filter_by(email=email, role=role).first()  # 👈 match both
         if user:
             login_user(user)
             session.permanent = True
+            session["role"] = user.role
+            session["user"] = email
             return redirect(url_for(f"{role}_dashboard"))
+
         flash("Invalid email or role.", "danger")
     return render_template("login.html")
+
 
 @app.route("/send_otp", methods=["POST"])
 def send_otp():
@@ -107,12 +112,13 @@ def send_otp():
 
     otp = generate_otp()
     expiry_time = time.time() + 900
-    otp_storage[email] = {"otp": otp, "expiry_time": expiry_time}
+    otp_storage[email] = {"otp": otp, "expiry_time": expiry_time, "role": role}  # 👈 also store role
 
-    send_otp_console(email, otp)  # Console print instead of email
+    send_otp_console(email, otp)
 
     flash(f"OTP generated for {email}. Please check your console.", "success")
     return redirect(url_for("otp_verification", email=email))
+
 
 @app.route("/otp_verification", methods=["GET", "POST"])
 def otp_verification():
@@ -131,8 +137,9 @@ def otp_verification():
             return redirect(url_for("home"))
 
         if entered_otp == stored_otp["otp"]:
+            role = stored_otp["role"]  # 👈 recover stored role
             del otp_storage[email]
-            user = User.query.filter_by(email=email).first()
+            user = User.query.filter_by(email=email, role=role).first()  # 👈 match both
             if user:
                 session["role"] = user.role
                 session["user"] = email
@@ -148,16 +155,18 @@ def otp_verification():
 
     return render_template("otp_verification.html", email=email)
 
+
 # ---------------- OTHER ROUTES (unchanged) ---------------- #
 @app.route("/login", methods=["POST"])
 def login():
     email = request.form["email"]
     role = request.form["role"]
+
     if not email.endswith("@amdocs.com"):
         flash("Only @amdocs.com email addresses are allowed!", "danger")
         return redirect(url_for("home"))
 
-    user = User.query.filter_by(email=email, role=role).first()
+    user = User.query.filter_by(email=email, role=role).first()  # 👈 match both
     if not user:
         user = User(email=email, role=role)
         db.session.add(user)
@@ -168,6 +177,7 @@ def login():
     session["role"] = user.role
     session["user"] = email
     return redirect(url_for(f"{role}_dashboard"))
+
 
 @app.route("/judge_dashboard", methods=["GET", "POST"])
 @login_required
