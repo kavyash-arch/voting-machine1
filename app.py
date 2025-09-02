@@ -33,6 +33,7 @@ login_manager.login_view = "home"
 
 # ---------------- MODELS ---------------- #
 class User(UserMixin, db.Model):
+    __tablename__ = "users" 
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     role = db.Column(db.String(50), nullable=False)
@@ -90,6 +91,7 @@ def home():
 def send_otp():
     email = request.form["email"].strip().lower()
     role = request.form["role"].strip().lower()
+    print("DEBUG /send_otp:", email, role)
 
     if not email.endswith("@amdocs.com"):
         flash("Only @amdocs.com email addresses are allowed!", "danger")
@@ -129,6 +131,8 @@ def otp_verification():
     if request.method == "POST":
         entered_otp = request.form["otp"]
         stored_otp = otp_storage.get(email)
+
+        print("DEBUG /otp_verification:", email, role)
 
         if not stored_otp:
             flash("No OTP found for this email. Please request a new one.", "danger")
