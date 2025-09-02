@@ -88,8 +88,8 @@ def home():
 
 @app.route("/send_otp", methods=["POST"])
 def send_otp():
-    email = request.form["email"]
-    role = request.form["role"]
+    email = request.form["email"].strip().lower()
+    role = request.form["role"].strip().lower()
 
     if not email.endswith("@amdocs.com"):
         flash("Only @amdocs.com email addresses are allowed!", "danger")
@@ -97,6 +97,7 @@ def send_otp():
 
     user = User.query.filter_by(email=email).first()
 
+    # Judges & Admins must already exist
     if role in ["judge", "admin"]:
         if not user:
             flash("Email not registered!", "danger")
@@ -105,27 +106,29 @@ def send_otp():
             flash("Role mismatch. Please choose the correct role.", "danger")
             return redirect(url_for("home"))
 
+    # Audiences are auto-created if not already in DB
     if role == "audience" and not user:
         user = User(email=email, role=role)
         db.session.add(user)
         db.session.commit()
 
+    # Generate & store OTP along with role
     otp = generate_otp()
     expiry_time = time.time() + 900
-    otp_storage[email] = {"otp": otp, "expiry_time": expiry_time, "role": role}  # 👈 also store role
+    otp_storage[email] = {"otp": otp, "expiry_time": expiry_time, "role": role}
 
-    send_otp_console(email, otp)
-
+    send_otp_console(email, otp)  # Console print instead of email
     flash(f"OTP generated for {email}. Please check your console.", "success")
     return redirect(url_for("otp_verification", email=email))
 
 
 @app.route("/otp_verification", methods=["GET", "POST"])
 def otp_verification():
-    email = request.args.get("email")
+    email = request.args.get("email").strip().lower()
+
     if request.method == "POST":
         entered_otp = request.form["otp"]
-        stored_otp = otp_storage.get(email, None)
+        stored_otp = otp_storage.get(email)
 
         if not stored_otp:
             flash("No OTP found for this email. Please request a new one.", "danger")
@@ -137,9 +140,10 @@ def otp_verification():
             return redirect(url_for("home"))
 
         if entered_otp == stored_otp["otp"]:
-            role = stored_otp["role"]  # 👈 recover stored role
+            role = stored_otp["role"].strip().lower()
             del otp_storage[email]
-            user = User.query.filter_by(email=email, role=role).first()  # 👈 match both
+
+            user = User.query.filter_by(email=email, role=role).first()
             if user:
                 session["role"] = user.role
                 session["user"] = email
@@ -154,6 +158,7 @@ def otp_verification():
             return redirect(url_for("otp_verification", email=email))
 
     return render_template("otp_verification.html", email=email)
+
 
 
 # ---------------- OTHER ROUTES (unchanged) ---------------- #
