@@ -91,7 +91,7 @@ def home():
 def send_otp():
     email = request.form["email"].strip().lower()
     role = request.form["role"].strip().lower()
-    print("DEBUG /send_otp:", email, role)
+    
 
     if not email.endswith("@amdocs.com"):
         flash("Only @amdocs.com email addresses are allowed!", "danger")
@@ -127,7 +127,6 @@ def send_otp():
 @app.route("/otp_verification", methods=["GET", "POST"])
 def otp_verification():
     email = request.args.get("email")
-    role = None  # ✅ initialize role
 
     if request.method == "POST":
         entered_otp = request.form["otp"]
@@ -153,7 +152,6 @@ def otp_verification():
                 session.permanent = True
                 login_user(user)
 
-                print("DEBUG /otp_verification: success", email, role)  # ✅ safe
                 return redirect(url_for(f"{user.role}_dashboard"))
             else:
                 flash("User not found. Please try again.", "danger")
@@ -162,7 +160,7 @@ def otp_verification():
             flash("Invalid OTP. Please try again.", "danger")
             return redirect(url_for("otp_verification", email=email))
 
-    print("DEBUG /otp_verification (GET):", email, role)  # ✅ safe even if None
+    
     return render_template("otp_verification.html", email=email)
 
 
