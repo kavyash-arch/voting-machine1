@@ -126,13 +126,12 @@ def send_otp():
 
 @app.route("/otp_verification", methods=["GET", "POST"])
 def otp_verification():
-    email = request.args.get("email").strip().lower()
+    email = request.args.get("email")
+    role = None  # ✅ initialize role
 
     if request.method == "POST":
         entered_otp = request.form["otp"]
-        stored_otp = otp_storage.get(email)
-
-        print("DEBUG /otp_verification:", email, role)
+        stored_otp = otp_storage.get(email, None)
 
         if not stored_otp:
             flash("No OTP found for this email. Please request a new one.", "danger")
@@ -144,15 +143,17 @@ def otp_verification():
             return redirect(url_for("home"))
 
         if entered_otp == stored_otp["otp"]:
-            role = stored_otp["role"].strip().lower()
+            role = stored_otp["role"]   # ✅ define role here
             del otp_storage[email]
-
             user = User.query.filter_by(email=email, role=role).first()
+
             if user:
                 session["role"] = user.role
                 session["user"] = email
                 session.permanent = True
                 login_user(user)
+
+                print("DEBUG /otp_verification: success", email, role)  # ✅ safe
                 return redirect(url_for(f"{user.role}_dashboard"))
             else:
                 flash("User not found. Please try again.", "danger")
@@ -161,7 +162,9 @@ def otp_verification():
             flash("Invalid OTP. Please try again.", "danger")
             return redirect(url_for("otp_verification", email=email))
 
+    print("DEBUG /otp_verification (GET):", email, role)  # ✅ safe even if None
     return render_template("otp_verification.html", email=email)
+
 
 
 
